@@ -7,7 +7,7 @@ import time
 # === Настройки ===
 TOKEN = "8400786899:AAEJzjyVfg3T6jn2qr3EdHGW7nzu84glnug"
 DATA_FILE = "activity.json"
-INACTIVITY_DAYS = 60
+INACTIVITY_DAYS = 30
 
 bot = telebot.TeleBot(TOKEN)
 

@@ -3,7 +3,7 @@ from pyrogram import Client
 from datetime import datetime, timezone
 import json
 import os
-from pyrogram.errors import FloodWait
+from pyrogram.errors import FloodWait, PeerIdInvalid, UsernameNotOccupied
 
 # Настройки
 api_id = 29664255
@@ -21,37 +21,47 @@ async def main():
     async with app:
         print("✅ Сессия запущена. Получаем участников...")
         count_members = 0
-        async for member in app.get_chat_members(group_id):
-            user = member.user
-            if user.is_bot:
-                continue
-            uid = str(user.id)
-            username = user.username or user.first_name or "Unknown"
-            user_activity[uid] = {
-        
-                "username": username,
-                "last_active": default_date
-            }
-            count_members += 1
-            if count_members % 100 == 0:
-                print(f"🧍‍♂️ Обработано участников: {count_members}")
+        try:
+            async for member in app.get_chat_members(group_id):
+                user = member.user
+                if user.is_bot:
+                    continue
+                uid = str(user.id)
+                username = user.username or user.first_name or "Unknown"
+                user_activity[uid] = {
+                    "username": username,
+                    "last_active": default_date
+                }
+                count_members += 1
+                if count_members % 100 == 0:
+                    print(f"🧍‍♂️ Обработано участников: {count_members}")
+        except (FloodWait, PeerIdInvalid, UsernameNotOccupied) as e:
+            print(f"❌ Ошибка при получении участников: {e}")
 
         print(f"🧍‍♂️ Всего участников: {count_members}")
 
         print("⌛ Сканируем историю сообщений и обновляем даты активности...")
 
         count_messages = 0
-        async for message in app.get_chat_history(group_id, limit=1000000):
-            count_messages += 1
-            if message.from_user:
-                uid = str(message.from_user.id)
-                last_active = message.date.astimezone(timezone.utc).isoformat()
-                if uid in user_activity:
-                    if last_active > user_activity[uid]["last_active"]:
-                        user_activity[uid]["last_active"] = last_active
-            
-            if count_messages % 500 == 0:
-                print(f"📨 Обработано сообщений: {count_messages}")
+        try:
+            async for message in app.get_chat_history(group_id):
+                count_messages += 1
+                if message.from_user:
+                    uid = str(message.from_user.id)
+                    last_active = message.date.astimezone(timezone.utc).isoformat()
+                    if uid in user_activity:
+                        if last_active > user_activity[uid]["last_active"]:
+                            user_activity[uid]["last_active"] = last_active
+                
+                if count_messages % 500 == 0:
+                    print(f"📨 Обработано сообщений: {count_messages}")
+        except FloodWait as e:
+            print(f"⏳ Нужно подождать {e.x} секунд из-за FloodWait...")
+            await asyncio.sleep(e.x)
+        except PeerIdInvalid:
+            print("❌ Неверный Peer ID, пропускаем сообщение...")
+        except Exception as e:
+            print(f"❌ Другая ошибка при чтении истории: {e}")
 
         print(f"✅ Обработка истории завершена. Всего сообщений: {count_messages}")
 
@@ -60,4 +70,6 @@ async def main():
 
         print(f"📁 Файл сохранён: {os.path.abspath(output_path)}")
 
-asyncio.run(main())
+# Запуск
+if __name__ == "__main__":
+    asyncio.run(main())
