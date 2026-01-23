@@ -99,8 +99,11 @@ async def collect_activity():
 
             logger.info("Сканируем историю сообщений...")
             count_messages = 0
+            last_processed_date = None
+
             async for message in app.get_chat_history(GROUP_ID):
                 count_messages += 1
+
                 if message.from_user:
                     uid = str(message.from_user.id)
                     last_active = message.date.astimezone(timezone.utc).isoformat()
@@ -108,12 +111,21 @@ async def collect_activity():
                         if last_active > user_activity_new[uid]["last_active"]:
                             user_activity_new[uid]["last_active"] = last_active
 
+                last_processed_date = message.date
 
-                if count_messages % 500 == 0:
-                    logger.info(f"Обработано сообщений: {count_messages}")
+                # Вывод прогресса каждые 100 сообщений
+                if count_messages % 100 == 0:
+                    logger.info(
+                        f"✅ Обработано {count_messages} сообщений. "
+                        f"Последнее сообщение: {last_processed_date}"
+                    )
 
+            # Итоговый отчёт
+            logger.info(f"✅ Обработка истории завершена.")
+            logger.info(f"📊 Всего обработано сообщений: {count_messages}")
+            if last_processed_date:
+                logger.info(f"Последняя дата в истории: {last_processed_date}")
 
-            logger.info(f"Обработка завершена. Сообщений: {count_messages}")
 
     except Exception as e:
         logger.error(f"❌ Ошибка сборщика: {e}")
