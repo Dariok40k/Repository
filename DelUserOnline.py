@@ -193,33 +193,68 @@ def cleanup(message):
                 username.strip() == ""
             )
 
+            # Пропускаем активных пользователей
             if last_active >= threshold:
                 continue
 
+            # Пропускаем админов
             if uid in admin_ids:
                 logger.info(f"Пропущен админ @{username} ({uid})")
                 continue
 
-            # Удаляем и сразу разблокируем (чтобы не банить)
-            bot.ban_chat_member(chat_id, uid)
-            bot.unban_chat_member(chat_id, uid)
+            # Пытаемся удалить пользователя
+            try:
+                bot.kick_chat_member(chat_id, uid)
+                removed += 1
+                if is_anonymous:
+                    removed_anonymous += 1
+                    logger.info(f"Удален [без имени] ({uid}) — неактивен с {last_active}")
+                else:
+                    logger.info(f"Удален @{username} ({uid}) — неактивен с {last_active}")
 
-            if is_anonymous:
-                logger.info(f"Удалён [без имени] ({uid}) — неактивен с {last_active}")
-                removed_anonymous += 1
-            else:
-                logger.info(f"Удалён @{username} ({uid}) — неактивен с {last_active}")
+                
+                # Удаляем из локального списка активности
+                if user_id_str in user_activity:
+                    del user_activity[user_id_str]
 
-            removed += 1
-            del user_activity[user_id_str]
+            except telebot.apihelper.ApiTelegramException as e:
+                if "user is an administrator" in str(e):
+                    logger.warning(f"Нельзя удалить админа @{username} ({uid}): {e}")
+                elif "not enough rights" in str(e):
+                    logger.warning(f"Нет прав для удаления @{username} ({uid}): {e}")
+                elif "user not found" in str(e):
+                    logger.info(f"Пользователь @{username} ({uid}) уже отсутствует в чате")
+                    if user_id_str in user_activity:
+                        del user_activity[user_id_str]
+                else:
+                    logger.error(f"Ошибка Telegram API при удалении {uid}: {e}")
 
-    except telebot.apihelper.ApiTelegramException as e:
-        if "user is an administrator" in str(e):
-            logger.warning(f"Нельзя удалить админа @{username} ({uid}): {e}")
-        elif "not enough rights" in str(e):
-            logger.warning(f"Нет прав для удаления @{username} ({uid}): {e}")
-        else:
-            logger.error(f"Ошибка Telegram API при удалении {uid}: {e}")
+            except Exception as e:
+                logger.error(f"Неожиданная ошибка при обработке {uid}: {e}")
 
+
+        except Exception as e:
+            logger.error(f"Ошибка обработки данных пользователя {uid}: {e}")
+
+
+    # Формируем итоговое сообщение
+    try:
+        report = (
+            f"🧹 Очистка завершена:\n"
+            f"• Проверено пользователей: {total_checked}\n"
+            f"• Удалено всего: {removed}\n"
+            f"• Из них без имени: {removed_anonymous}\n"
+            f"• Осталось в базе: {len(user_activity)}"
+        )
+        bot.send_message(chat_id, report)
+        logger.info(f"Очистка завершена. Удалено: {removed} пользователей.")
     except Exception as e:
-        logger.error(f"Неожиданная ошибка при обработке {uid}: {e}")
+        logger.error(f"Не удалось отправить отчёт об очистке: {e}")
+
+    # Сохраняем обновлённый список активности
+    try:
+        with open(DATA_FILE, "w", encoding="utf-8") as f:
+            json.dump(user_activity, f, ensure_ascii=False, indent=2)
+        logger.info(f"Обновлённые данные сохранены в {DATA_FILE}")
+    except Exception as e:
+        logger.error(f"Ошибка сохранения {DATA_FILE} после очистки: {e}")
