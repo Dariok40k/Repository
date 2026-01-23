@@ -1,8 +1,15 @@
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
-from telegram.ext import Application, CommandHandler, CallbackQueryHandler, ContextTypes
+from telegram.ext import Application, CommandHandler, CallbackQueryHandler, ContextTypes, Filters
 import logging
 
 ADMIN_ID = 247875327
+
+# Состояние диалога (кто и что заполняет)
+USER_STATE = {}  # {user_id: "waiting_name", "waiting_phone", ...}
+
+
+# Временные данные заказов (до подтверждения)
+TEMP_ORDERS = {}  # {user_id: {"product_id": ..., "name": None, "phone": None, "address": None}}
 
 # Настраиваем логирование
 logging.basicConfig(
@@ -100,28 +107,111 @@ async def buy_product(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await query.answer()
     product_id = int(query.data.split("_")[1])
     
+    user_id = query.from_user.id
+
+    # Проверяем, есть ли товар
     product = PRODUCTS.get(product_id)
     if not product:
         await query.edit_message_text("Товар не найден.")
         return
-    
-    caption = (
-        f"Вы выбрали:\n<b>{product['name']}</b>\n"
-        f"{product['description']}\n"
-        f"Цена: <b>{product['price']} руб.</b>"
-    )
+
+    # Сохраняем выбранный товар
+    TEMP_ORDERS[user_id] = {
+        "product_id": product_id,
+        "name": None,        # имя пользователя
+        "phone": None,      # телефон
+        "address": None       # адрес
+    }
+    USER_STATE[user_id] = "waiting_name"
+
+
+    # Спрашиваем имя
     await query.edit_message_text(
-        text=caption,
-        parse_mode="HTML",
-        reply_markup=confirm_keyboard(product_id)
+        f"Вы выбрали: <b>{product['name']}</b>\n"
+        "Для оформления заказа укажите ваше имя:",
+        parse_mode="HTML"
     )
+
+async def handle_user_response(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    user_id = update.effective_user.id
+    text = update.message.text.strip()
+
+
+    # Если пользователь не в процессе заполнения
+    if user_id not in USER_STATE:
+        return
+
+    state = USER_STATE[user_id]
+
+    if state == "waiting_name":
+        TEMP_ORDERS[user_id]["name"] = text
+        USER_STATE[user_id] = "waiting_phone"
+        await update.message.reply_text("Укажите ваш телефон для связи:")
+
+
+    elif state == "waiting_phone":
+        # Проверяем формат телефона (упрощённо)
+        if not (text.isdigit() and len(text) >= 10):
+            await update.message.reply_text("Пожалуйста, введите корректный номер телефона (10–11 цифр):")
+            return
+        TEMP_ORDERS[user_id]["phone"] = text
+        USER_STATE[user_id] = "waiting_address"
+        await update.message.reply_text("Укажите адрес доставки:")
+
+    elif state == "waiting_address":
+        TEMP_ORDERS[user_id]["address"] = text
+
+
+        # Формируем заказ
+        order = TEMP_ORDERS[user_id]
+        product = PRODUCTS[order["product_id"]]
+
+
+        # Сохраняем в ORDERS
+        ORDERS.append({
+            "user_id": user_id,
+            "product_id": order["product_id"],
+            "quantity": 1,
+            "name": order["name"],
+            "phone": order["phone"],
+            "address": order["address"],
+            "status": "новый"
+        })
+
+        # Очищаем временные данные
+        del USER_STATE[user_id]
+        del TEMP_ORDERS[user_id]
+
+
+        # Отчёт администратору
+        await context.bot.send_message(
+            ADMIN_ID,
+            f"<b>Новый заказ!</b>\n"
+            f"Пользователь: {user_id}\n"
+            f"Товар: {product['name']}\n"
+            f"Имя: {order['name']}\n"
+            f"Телефон: {order['phone']}\n"
+            f!Адрес: {order['address']}",
+            parse_mode="HTML"
+        )
+
+        # Подтверждение пользователю
+        await update.message.reply_html(
+            f"✅ Заказ оформлен!\n\n"
+            f"<b>Товар:</b> {product['name']}\n"
+            f"<b>Имя:</b> {order['name']}\n"
+            f"<b>Телефон:</b> {order['phone']}\n"
+            f"<b>Адрес:</b> {order['address']}\n\n"
+            "Мы свяжемся с вами для уточнения деталей."
+        )
 
 async def confirm_order(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     await query.answer()
     product_id = int(query.data.split("_")[1])
-    user_id = query.from_user.id
-    
+
+    await buy_product(update, context)
+
     ORDERS.append({
         "user_id": user_id,
         "product_id": product_id,
@@ -194,6 +284,7 @@ def main():
     
     application.add_handler(CommandHandler("start", start))
     application.add_handler(CommandHandler("admin", admin_orders))
+    application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_user_response))
     application.add_handler(CallbackQueryHandler(show_catalog, pattern="^catalog$"))
     application.add_handler(CallbackQueryHandler(buy_product, pattern="^buy_"))
     application.add_handler(CallbackQueryHandler(confirm_order, pattern="^confirm_"))
