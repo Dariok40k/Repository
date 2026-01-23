@@ -2,6 +2,8 @@ from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import Application, CommandHandler, CallbackQueryHandler, ContextTypes
 import logging
 
+ADMIN_ID = 247875327
+
 # Настраиваем логирование
 logging.basicConfig(
     level=logging.INFO,
@@ -155,6 +157,33 @@ async def show_help(update: Update, context: ContextTypes.DEFAULT_TYPE):
         "2. «Мои заказы» — увидеть свои заказы.\n"
         "3. Нажмите «Купить», чтобы оформить заказ."
     )
+
+async def admin_orders(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    user_id = update.effective_user.id
+    
+    # Проверяем, что это администратор
+    if user_id != ADMIN_ID:
+        await update.message.reply_text("Доступ запрещён.")
+        return
+
+    if not ORDERS:
+        await update.message.reply_text("Заказаов пока нет.")
+        return
+
+    # Формируем отчёт
+    report = "<b>Список всех заказов:</b>\n\n"
+    for order in ORDERS:
+        product = PRODUCTS[order["product_id"]]
+        report += (
+            f"🔹 Заказ №{len(report.splitlines())}\n"
+            f"   Пользователь: {order['user_id']}\n"
+            f"   Товар: {product['name']}\n"
+            f"   Количество: ×{order['quantity']}\n"
+            f"   Цена: {product['price']} руб.\n\n"
+        )
+
+    await update.message.reply_html(report)
+
 
 # Запуск бота
 def main():
