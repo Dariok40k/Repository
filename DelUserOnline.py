@@ -200,3 +200,14 @@ def cleanup(message):
 
             removed += 1
             del user_activity[user_id_str]
+
+    except telebot.apihelper.ApiTelegramException as e:
+        if "user is an administrator" in str(e):
+            logger.warning(f"Нельзя удалить админа @{username} ({uid}): {e}")
+        elif "not enough rights" in str(e):
+            logger.warning(f"Нет прав для удаления @{username} ({uid}): {e}")
+        else:
+            logger.error(f"Ошибка Telegram API при удалении {uid}: {e}")
+
+    except Exception as e:
+        logger.error(f"Неожиданная ошибка при обработке {uid}: {e}")
