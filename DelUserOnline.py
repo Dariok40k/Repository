@@ -93,7 +93,7 @@ async def collect_activity():
                 }
                 count_members += 1
                 if count_members % 100 == 0:
-                    logger.info(f"Обработано участников: {count_members}")
+                    logger.info(f"✅ Обработано участников: {count_members}")
 
             logger.info(f"Всего участников: {count_members}")
 
@@ -258,3 +258,24 @@ def cleanup(message):
         logger.info(f"Обновлённые данные сохранены в {DATA_FILE}")
     except Exception as e:
         logger.error(f"Ошибка сохранения {DATA_FILE} после очистки: {e}")
+
+
+if __name__ == "__main__":
+    # Один раз проверяем зависимости и загружаем данные
+    check_dependencies()
+    user_activity = load_data()
+
+    # Запускаем сборщик в фоне (раз в 24 часа)
+    asyncio.get_event_loop().create_task(collect_activity())
+    asyncio.get_event_loop().call_later(COLLECTOR_INTERVAL, asyncio.get_event_loop().create_task, collect_activity())
+
+
+    # Запуск бота с защитой от конфликтов
+    try:
+        bot.polling(
+            none_stop=False,      # Останавливаемся при ошибке
+            timeout=30,         # Таймаут на запрос
+            allowed_updates=["message"]
+        )
+    except Exception as e:
+        logger.error(f"Ошибка polling: {e}")
