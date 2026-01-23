@@ -60,15 +60,18 @@ async def show_catalog(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     await query.answer()
     
-    await query.message.edit_text("Выберите товар:")
+    # Удаляем старое меню
+    await query.delete_message()
     
+    # Отправляем товары
     for product_id, data in PRODUCTS.items():
         caption = (
             f"<b>{data['name']}</b>\n"
             f"{data['description']}\n"
             f"Цена: <b>{data['price']} руб.</b>"
         )
-        await query.message.reply_photo(
+        await query.bot.send_photo(
+            chat_id=query.message.chat_id,
             photo=data["photo"],
             caption=caption,
             parse_mode="HTML",
