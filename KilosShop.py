@@ -1,30 +1,35 @@
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import Application, CommandHandler, CallbackQueryHandler, ContextTypes
+import logging
+
+# Настраиваем логирование
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+)
+logger = logging.getLogger(__name__)
 
 # Товары (хранятся в памяти)
 PRODUCTS = {
     1: {
         "name": "Футболка с логотипом",
         "description": "Хлопковая футболка, унисекс",
-        "price": 990,
-        "photo": "https://example.com/tshirt.jpg"  # замените на реальную ссылку
+        "price": 990
     },
     2: {
         "name": "Кружка «Лучший»",
         "description": "Керамическая, объём 300 мл",
-        "price": 450,
-        "photo": "https://example.com/mug.jpg"
+        "price": 450
     },
     3: {
         "name": "Блокнот А5",
         "description": "100 страниц, твёрдая обложка",
-        "price": 290,
-        "photo": "https://example.com/notebook.jpg"
+        "price": 290
     }
 }
 
 # Заказы (хранятся в памяти)
-ORDERS = []  # список заказов: {"user_id": ..., "product_id": ..., "quantity": 1}
+ORDERS = []  # список: {"user_id": ..., "product_id": ..., "quantity": 1}
 
 # Клавиатуры
 def main_menu():
@@ -60,23 +65,33 @@ async def show_catalog(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     await query.answer()
     
-    # Удаляем старое меню
-    await query.delete_message()
-    
-    # Отправляем товары
-    for product_id, data in PRODUCTS.items():
-        caption = (
-            f"<b>{data['name']}</b>\n"
-            f"{data['description']}\n"
-            f"Цена: <b>{data['price']} руб.</b>"
-        )
-        await query.bot.send_photo(
-            chat_id=query.message.chat_id,
-            photo=data["photo"],
-            caption=caption,
-            parse_mode="HTML",
-            reply_markup=product_keyboard(product_id)
-        )
+    try:
+        await query.delete_message()  # Убираем старое меню
+        
+        if not PRODUCTS:
+            await query.message.reply_text("Товары отсутствуют.")
+            return
+        
+        # Формируем текст каталога
+        catalog_text = "<b>Каталог товаров:</b>\n\n"
+        for product_id, data in PRODUCTS.items():
+            catalog_text += (
+                f"<b>{data['name']}</b>\n"
+                f"{data['description']}\n"
+                f"Цена: <b>{data['price']} руб.</b>\n"
+            )
+            catalog_text += "\n"  # Разделитель между товарами
+        
+        # Отправляем каталог и кнопки для каждого товара
+        for product_id, data in PRODUCTS.items():
+            await query.message.reply_html(
+                f"<b>{data['name']}</b>\n{data['description']}\nЦена: <b>{data['price']} руб.</b>",
+                reply_markup=product_keyboard(product_id)
+            )
+            
+    except Exception as e:
+        logger.error(f"Ошибка в show_catalog: {e}")
+        await query.message.reply_text(f"Ошибка: {e}")
 
 async def buy_product(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
@@ -93,8 +108,8 @@ async def buy_product(update: Update, context: ContextTypes.DEFAULT_TYPE):
         f"{product['description']}\n"
         f"Цена: <b>{product['price']} руб.</b>"
     )
-    await query.edit_message_caption(
-        caption=caption,
+    await query.edit_message_text(
+        text=caption,
         parse_mode="HTML",
         reply_markup=confirm_keyboard(product_id)
     )
