@@ -279,3 +279,53 @@ if __name__ == "__main__":
         )
     except Exception as e:
         logger.error(f"Ошибка polling: {e}")
+
+
+import time
+import random
+import os
+import atexit
+import signal
+import sys
+
+# 1. Проверка единственного экземпляра
+LOCK_FILE = "/tmp/telegram_bot.lock"
+def check_single_instance():
+    if os.path.exists(LOCK_FILE):
+        logger.error("Другой экземпляр бота уже работает. Выход.")
+        sys.exit(1)
+    with open(LOCK_FILE, "w") as f:
+        f.write(str(os.getpid()))
+def cleanup_lock():
+    if os.path.exists(LOCK_FILE):
+        os.remove(LOCK_FILE)
+atexit.register(cleanup_lock)
+signal.signal(signal.SIGTERM, lambda s, f: cleanup_lock() or sys.exit(0))
+signal.signal(signal.SIGINT, lambda s, f: cleanup_lock() or sys.exit(0))
+check_single_instance()
+
+# 2. Задержка перед стартом
+time.sleep(random.randint(5, 15))
+
+
+# 3. Запуск с ретраями
+max_retries = 3
+for attempt in range(1, max_retries + 1):
+    try:
+        logger.info(f"Запуск polling (попытка {attempt})...")
+        bot.polling(
+            none_stop=False,
+            timeout=20,
+            allowed_updates=["message"],
+            drop_pending_updates=True,
+            interval=5
+        )
+        break
+    except Exception as e:
+        if "Conflict: terminated by other getUpdates! in str(e) and attempt < max_retries:
+            wait = 10 * attempt
+            logger.warning(f!Конфликт. Ждё̈м {wait} сек...")
+            time.sleep(wait)
+        else:
+            logger.error(f"Ошибка: {e}")
+            break
