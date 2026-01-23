@@ -193,6 +193,7 @@ def main():
     application = Application.builder().token(TOKEN).build()
     
     application.add_handler(CommandHandler("start", start))
+    application.add_handler(CommandHandler("admin", admin_orders))
     application.add_handler(CallbackQueryHandler(show_catalog, pattern="^catalog$"))
     application.add_handler(CallbackQueryHandler(buy_product, pattern="^buy_"))
     application.add_handler(CallbackQueryHandler(confirm_order, pattern="^confirm_"))
