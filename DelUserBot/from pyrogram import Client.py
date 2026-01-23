@@ -8,7 +8,7 @@ from pyrogram.errors import FloodWait, PeerIdInvalid, UsernameNotOccupied
 # Настройки
 api_id = 29664255
 api_hash = "89a43fab6a5944a1da7e646318a7b3e9"
-group_id = -1002479600311
+group_id = -1002361725921
 session_name = "my_user_session"
 output_path = "activity.json"
 
